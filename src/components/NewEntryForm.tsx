@@ -2,13 +2,17 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { COMPANIES, PROJECTS, WORKS, LAST_COMPANY_KEY } from '@/lib/constants';
 
-const PROJECTS = ['B-Blok', 'A-Blok', 'TBM Girişi', 'NATM Kesimi', 'Portal'];
-const WORKS = ['Kazı', 'Kalıp', 'Donatı', 'Beton dökümü', 'Püskürtme beton', 'Tahkimat', 'Diğer'];
+type MediaItem = { file: File; url: string; isVideo: boolean };
+
+const inputCls =
+  'w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 bg-white placeholder:text-neutral-400';
+const labelCls = 'mb-1.5 block text-sm font-medium text-neutral-700';
 
 export default function NewEntryForm({ onSaved }: { onSaved: () => void }) {
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [media, setMedia] = useState<MediaItem[]>([]);
+  const [company, setCompany] = useState(COMPANIES[0]);
   const [project, setProject] = useState(PROJECTS[0]);
   const [work, setWork] = useState(WORKS[0]);
   const [note, setNote] = useState('');
@@ -17,6 +21,11 @@ export default function NewEntryForm({ onSaved }: { onSaved: () => void }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem(LAST_COMPANY_KEY) : null;
+    if (saved && COMPANIES.includes(saved)) setCompany(saved);
+  }, []);
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -32,48 +41,61 @@ export default function NewEntryForm({ onSaved }: { onSaved: () => void }) {
     );
   }, []);
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setPhotoFile(file);
-    setPhotoPreview(URL.createObjectURL(file));
+  function handleCompanyChange(value: string) {
+    setCompany(value);
+    localStorage.setItem(LAST_COMPANY_KEY, value);
+  }
+
+  function handleFilesAdded(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    const items: MediaItem[] = files.map((file) => ({
+      file,
+      url: URL.createObjectURL(file),
+      isVideo: file.type.startsWith('video/'),
+    }));
+    setMedia((prev) => [...prev, ...items]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function removeMedia(index: number) {
+    setMedia((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function handleSave() {
     setSaving(true);
     setError(null);
     try {
-      let photoUrl: string | null = null;
+      const uploadedUrls: string[] = [];
 
-      if (photoFile) {
-        const ext = photoFile.name.split('.').pop() || 'jpg';
+      for (const item of media) {
+        const ext = item.file.name.split('.').pop() || (item.isVideo ? 'mp4' : 'jpg');
         const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
         const { error: uploadError } = await supabase.storage
           .from('photos')
-          .upload(fileName, photoFile);
+          .upload(fileName, item.file);
         if (uploadError) throw uploadError;
         const { data: publicUrlData } = supabase.storage.from('photos').getPublicUrl(fileName);
-        photoUrl = publicUrlData.publicUrl;
+        uploadedUrls.push(publicUrlData.publicUrl);
       }
 
       const { error: insertError } = await supabase.from('entries').insert({
+        company,
         project,
         work,
         note: note || null,
-        photo_url: photoUrl,
+        media_urls: uploadedUrls,
         gps_lat: gps?.lat ?? null,
         gps_lng: gps?.lng ?? null,
       });
       if (insertError) throw insertError;
 
-      setPhotoFile(null);
-      setPhotoPreview(null);
+      setMedia([]);
       setNote('');
-      if (fileInputRef.current) fileInputRef.current.value = '';
       onSaved();
     } catch (err) {
       console.error(err);
-      setError('Kaydetme hatası. İnternet bağlantını kontrol edip tekrar dene.');
+      const msg = err instanceof Error ? err.message : 'Bilinmeyen hata';
+      setError(`Kaydetme hatası: ${msg}`);
     } finally {
       setSaving(false);
     }
@@ -81,24 +103,60 @@ export default function NewEntryForm({ onSaved }: { onSaved: () => void }) {
 
   return (
     <div className="rounded-xl border border-neutral-200 bg-white p-4">
-      <label className="mb-1.5 block text-sm text-neutral-500">Fotoğraf</label>
+      <label className={labelCls}>Fotoğraf / video</label>
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,video/*"
         capture="environment"
-        onChange={handleFileChange}
-        className="mb-3 w-full text-sm"
+        multiple
+        onChange={handleFilesAdded}
+        className="hidden"
       />
-      {photoPreview && (
-        <img src={photoPreview} alt="önizleme" className="mb-3 w-full rounded-lg" />
-      )}
+      <div className="mb-3 grid grid-cols-3 gap-2">
+        {media.map((item, i) => (
+          <div key={i} className="relative aspect-square overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100">
+            {item.isVideo ? (
+              <video src={item.url} className="h-full w-full object-cover" muted />
+            ) : (
+              <img src={item.url} alt="" className="h-full w-full object-cover" />
+            )}
+            <button
+              onClick={() => removeMedia(i)}
+              className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-xs text-white"
+              aria-label="Kaldır"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="flex aspect-square items-center justify-center rounded-lg border-2 border-dashed border-neutral-300 text-2xl text-neutral-400"
+          aria-label="Fotoğraf veya video ekle"
+        >
+          +
+        </button>
+      </div>
 
-      <label className="mb-1.5 block text-sm text-neutral-500">Proje / blok</label>
+      <label className={labelCls}>Taşeron firma</label>
+      <select
+        value={company}
+        onChange={(e) => handleCompanyChange(e.target.value)}
+        className={`mb-3 ${inputCls}`}
+      >
+        {COMPANIES.map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+      </select>
+
+      <label className={labelCls}>Proje / blok</label>
       <select
         value={project}
         onChange={(e) => setProject(e.target.value)}
-        className="mb-3 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm"
+        className={`mb-3 ${inputCls}`}
       >
         {PROJECTS.map((p) => (
           <option key={p} value={p}>
@@ -107,11 +165,11 @@ export default function NewEntryForm({ onSaved }: { onSaved: () => void }) {
         ))}
       </select>
 
-      <label className="mb-1.5 block text-sm text-neutral-500">İmalat kalemi</label>
+      <label className={labelCls}>İmalat kalemi</label>
       <select
         value={work}
         onChange={(e) => setWork(e.target.value)}
-        className="mb-3 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm"
+        className={`mb-3 ${inputCls}`}
       >
         {WORKS.map((w) => (
           <option key={w} value={w}>
@@ -120,16 +178,16 @@ export default function NewEntryForm({ onSaved }: { onSaved: () => void }) {
         ))}
       </select>
 
-      <label className="mb-1.5 block text-sm text-neutral-500">Not (opsiyonel)</label>
+      <label className={labelCls}>Not (opsiyonel)</label>
       <textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}
         rows={2}
         placeholder="Örn: sağ tünel 45. metre, kalıp söküldü"
-        className="mb-3 w-full resize-y rounded-lg border border-neutral-200 px-3 py-2 text-sm"
+        className={`mb-3 resize-y ${inputCls}`}
       />
 
-      <p className="mb-3 text-xs text-neutral-400">{gpsStatus}</p>
+      <p className="mb-3 text-xs text-neutral-500">{gpsStatus}</p>
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 

@@ -7,11 +7,16 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export type Entry = {
   id: string;
+  company: string | null;
   project: string;
   work: string;
   note: string | null;
-  photo_url: string | null;
+  media_urls: string[] | null;
   gps_lat: number | null;
   gps_lng: number | null;
   created_at: string;
 };
+
+export function isVideoUrl(url: string) {
+  return /\.(mp4|mov|webm|m4v)$/i.test(url);
+}
