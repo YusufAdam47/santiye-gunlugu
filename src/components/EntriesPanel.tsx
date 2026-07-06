@@ -2,28 +2,96 @@
 
 import { useState, useEffect } from 'react';
 import { supabase, Entry, isVideoUrl } from '@/lib/supabase';
-import { COMPANIES, PROJECTS } from '@/lib/constants';
+import { COMPANIES, PROJECTS, WORKS } from '@/lib/constants';
 
 const selectCls = 'rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 bg-white';
+const editInputCls =
+  'w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 bg-white mb-2';
+
+type EditState = {
+  company: string;
+  project: string;
+  work: string;
+  note: string;
+  media_urls: string[];
+};
 
 export default function EntriesPanel({ refreshKey }: { refreshKey: number }) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [companyFilter, setCompanyFilter] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editState, setEditState] = useState<EditState | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    let query = supabase.from('entries').select('*').order('created_at', { ascending: false });
+    if (companyFilter) query = query.eq('company', companyFilter);
+    if (projectFilter) query = query.eq('project', projectFilter);
+    const { data, error } = await query;
+    if (!error && data) setEntries(data as Entry[]);
+    setLoading(false);
+  }
 
   useEffect(() => {
-    async function load() {
-      setLoading(true);
-      let query = supabase.from('entries').select('*').order('created_at', { ascending: false });
-      if (companyFilter) query = query.eq('company', companyFilter);
-      if (projectFilter) query = query.eq('project', projectFilter);
-      const { data, error } = await query;
-      if (!error && data) setEntries(data as Entry[]);
-      setLoading(false);
-    }
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyFilter, projectFilter, refreshKey]);
+
+  function startEdit(e: Entry) {
+    setEditingId(e.id);
+    setEditState({
+      company: e.company || COMPANIES[0],
+      project: e.project,
+      work: e.work,
+      note: e.note || '',
+      media_urls: e.media_urls || [],
+    });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditState(null);
+  }
+
+  function removeMediaFromEdit(url: string) {
+    if (!editState) return;
+    setEditState({ ...editState, media_urls: editState.media_urls.filter((u) => u !== url) });
+  }
+
+  async function saveEdit(id: string) {
+    if (!editState) return;
+    setSavingEdit(true);
+    const { error } = await supabase
+      .from('entries')
+      .update({
+        company: editState.company,
+        project: editState.project,
+        work: editState.work,
+        note: editState.note || null,
+        media_urls: editState.media_urls,
+      })
+      .eq('id', id);
+    setSavingEdit(false);
+    if (!error) {
+      cancelEdit();
+      load();
+    } else {
+      alert('Güncelleme hatası: ' + error.message);
+    }
+  }
+
+  async function deleteEntry(id: string) {
+    if (!confirm('Bu kaydı silmek istediğine emin misin? Bu işlem geri alınamaz.')) return;
+    const { error } = await supabase.from('entries').delete().eq('id', id);
+    if (!error) {
+      load();
+    } else {
+      alert('Silme hatası: ' + error.message);
+    }
+  }
 
   return (
     <div>
@@ -76,6 +144,100 @@ export default function EntriesPanel({ refreshKey }: { refreshKey: number }) {
             ' ' +
             d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
           const media = e.media_urls || [];
+          const isEditing = editingId === e.id;
+
+          if (isEditing && editState) {
+            return (
+              <div key={e.id} className="rounded-xl border-2 border-blue-400 bg-white p-3">
+                {editState.media_urls.length > 0 && (
+                  <div className="mb-2 grid grid-cols-2 gap-1">
+                    {editState.media_urls.map((url, i) =>
+                      isVideoUrl(url) ? (
+                        <div key={i} className="relative aspect-square">
+                          <video src={url} className="h-full w-full rounded-lg object-cover" muted />
+                          <button
+                            onClick={() => removeMediaFromEdit(url)}
+                            className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-xs text-white"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ) : (
+                        <div key={i} className="relative aspect-square">
+                          <img src={url} alt="" className="h-full w-full rounded-lg object-cover" />
+                          <button
+                            onClick={() => removeMediaFromEdit(url)}
+                            className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-xs text-white"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
+                <label className="mb-1 block text-xs font-medium text-neutral-600">Taşeron firma</label>
+                <select
+                  value={editState.company}
+                  onChange={(ev) => setEditState({ ...editState, company: ev.target.value })}
+                  className={editInputCls}
+                >
+                  {COMPANIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <label className="mb-1 block text-xs font-medium text-neutral-600">Proje / blok</label>
+                <select
+                  value={editState.project}
+                  onChange={(ev) => setEditState({ ...editState, project: ev.target.value })}
+                  className={editInputCls}
+                >
+                  {PROJECTS.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+                <label className="mb-1 block text-xs font-medium text-neutral-600">İmalat kalemi</label>
+                <select
+                  value={editState.work}
+                  onChange={(ev) => setEditState({ ...editState, work: ev.target.value })}
+                  className={editInputCls}
+                >
+                  {WORKS.map((w) => (
+                    <option key={w} value={w}>
+                      {w}
+                    </option>
+                  ))}
+                </select>
+                <label className="mb-1 block text-xs font-medium text-neutral-600">Not</label>
+                <textarea
+                  value={editState.note}
+                  onChange={(ev) => setEditState({ ...editState, note: ev.target.value })}
+                  rows={2}
+                  className={`${editInputCls} resize-y`}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => saveEdit(e.id)}
+                    disabled={savingEdit}
+                    className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  >
+                    {savingEdit ? 'Kaydediliyor...' : 'Kaydet'}
+                  </button>
+                  <button
+                    onClick={cancelEdit}
+                    className="flex-1 rounded-lg border border-neutral-300 py-2 text-sm font-medium text-neutral-700"
+                  >
+                    İptal
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div key={e.id} className="rounded-xl border border-neutral-200 bg-white p-3">
               {media.length > 0 && (
@@ -103,12 +265,26 @@ export default function EntriesPanel({ refreshKey }: { refreshKey: number }) {
                 </span>
               </div>
               {e.note && <p className="mb-1.5 text-sm text-neutral-900">{e.note}</p>}
-              <p className="text-xs text-neutral-500">
+              <p className="mb-2 text-xs text-neutral-500">
                 {dateStr}
                 {e.gps_lat && e.gps_lng
                   ? ` · ${e.gps_lat.toFixed(4)}, ${e.gps_lng.toFixed(4)}`
                   : ''}
               </p>
+              <div className="flex gap-2 print:hidden">
+                <button
+                  onClick={() => startEdit(e)}
+                  className="flex-1 rounded-lg border border-neutral-300 py-1.5 text-xs font-medium text-neutral-700"
+                >
+                  Düzenle
+                </button>
+                <button
+                  onClick={() => deleteEntry(e.id)}
+                  className="flex-1 rounded-lg border border-red-200 py-1.5 text-xs font-medium text-red-600"
+                >
+                  Sil
+                </button>
+              </div>
             </div>
           );
         })}
