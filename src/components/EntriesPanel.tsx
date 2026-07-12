@@ -24,6 +24,7 @@ export default function EntriesPanel({ refreshKey }: { refreshKey: number }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [lightbox, setLightbox] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -246,7 +247,13 @@ export default function EntriesPanel({ refreshKey }: { refreshKey: number }) {
                     isVideoUrl(url) ? (
                       <video key={i} src={url} controls className="aspect-square w-full rounded-lg object-cover" />
                     ) : (
-                      <img key={i} src={url} alt="" className="aspect-square w-full rounded-lg object-cover" />
+                      <img
+                        key={i}
+                        src={url}
+                        alt=""
+                        onClick={() => setLightbox(url)}
+                        className="aspect-square w-full cursor-zoom-in rounded-lg object-cover"
+                      />
                     )
                   )}
                 </div>
@@ -289,6 +296,15 @@ export default function EntriesPanel({ refreshKey }: { refreshKey: number }) {
           );
         })}
       </div>
+
+      {lightbox && (
+        <div
+          onClick={() => setLightbox(null)}
+          className="fixed inset-0 z-50 flex cursor-zoom-out items-center justify-center bg-black/80 p-4"
+        >
+          <img src={lightbox} alt="" className="max-h-full max-w-full rounded-lg object-contain" />
+        </div>
+      )}
     </div>
   );
 }

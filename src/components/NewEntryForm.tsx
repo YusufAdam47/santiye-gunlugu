@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { COMPANIES, PROJECTS, WORKS, LAST_COMPANY_KEY } from '@/lib/constants';
+import { queueEntry, getPendingCount, syncPendingEntries } from '@/lib/offlineQueue';
 
 type MediaItem = { file: File; url: string; isVideo: boolean };
 
@@ -10,7 +11,7 @@ const inputCls =
   'w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 bg-white placeholder:text-neutral-400';
 const labelCls = 'mb-1.5 block text-sm font-medium text-neutral-700';
 
-export default function NewEntryForm({ onSaved }: { onSaved: () => void }) {
+export default function NewEntryForm() {
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [company, setCompany] = useState(COMPANIES[0]);
   const [project, setProject] = useState(PROJECTS[0]);
@@ -20,7 +21,46 @@ export default function NewEntryForm({ onSaved }: { onSaved: () => void }) {
   const [gpsStatus, setGpsStatus] = useState('Konum alınıyor...');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [syncing, setSyncing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function refreshPendingCount() {
+    const count = await getPendingCount();
+    setPendingCount(count);
+  }
+
+  async function trySync() {
+    if (!navigator.onLine) return;
+    setSyncing(true);
+    await syncPendingEntries();
+    await refreshPendingCount();
+    setSyncing(false);
+  }
+
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+    refreshPendingCount();
+
+    function handleOnline() {
+      setIsOnline(true);
+      trySync();
+    }
+    function handleOffline() {
+      setIsOnline(false);
+    }
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    // Sayfa açılışında da bekleyen kayıt varsa göndermeyi dene
+    trySync();
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem(LAST_COMPANY_KEY) : null;
@@ -65,6 +105,30 @@ export default function NewEntryForm({ onSaved }: { onSaved: () => void }) {
     setSaving(true);
     setError(null);
     try {
+      if (!navigator.onLine) {
+        // Çevrimdışı: kaydı telefonda beklet, bağlantı gelince otomatik gönderilecek
+        const mediaFiles = media.map((item) => ({
+          blob: item.file,
+          name: item.file.name,
+          type: item.file.type,
+        }));
+        await queueEntry({
+          company,
+          project,
+          work,
+          note: note || null,
+          gps_lat: gps?.lat ?? null,
+          gps_lng: gps?.lng ?? null,
+          mediaFiles,
+        });
+        setMedia([]);
+        setNote('');
+        setSuccessMsg(true);
+        setTimeout(() => setSuccessMsg(false), 2500);
+        await refreshPendingCount();
+        return;
+      }
+
       const uploadedUrls: string[] = [];
 
       for (const item of media) {
@@ -91,7 +155,8 @@ export default function NewEntryForm({ onSaved }: { onSaved: () => void }) {
 
       setMedia([]);
       setNote('');
-      onSaved();
+      setSuccessMsg(true);
+      setTimeout(() => setSuccessMsg(false), 2500);
     } catch (err) {
       console.error(err);
       const msg = err instanceof Error ? err.message : 'Bilinmeyen hata';
@@ -189,14 +254,32 @@ export default function NewEntryForm({ onSaved }: { onSaved: () => void }) {
 
       <p className="mb-3 text-xs text-neutral-500">{gpsStatus}</p>
 
+      {!isOnline && (
+        <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+          İnternet yok — kayıt telefonda bekletilecek, bağlantı gelince otomatik gönderilecek.
+        </p>
+      )}
+      {isOnline && pendingCount > 0 && (
+        <p className="mb-3 rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-800">
+          {syncing
+            ? `${pendingCount} bekleyen kayıt gönderiliyor...`
+            : `${pendingCount} bekleyen kayıt var, gönderiliyor...`}
+        </p>
+      )}
+
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {successMsg && (
+        <p className="mb-3 text-sm text-green-600">
+          {isOnline ? 'Kayıt eklendi.' : 'Kayıt telefonda bekletildi, bağlantı gelince gönderilecek.'}
+        </p>
+      )}
 
       <button
         onClick={handleSave}
         disabled={saving}
         className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white disabled:opacity-50"
       >
-        {saving ? 'Kaydediliyor...' : 'Kaydet'}
+        {saving ? 'Kaydediliyor...' : isOnline ? 'Kaydet' : 'Kaydet (çevrimdışı)'}
       </button>
     </div>
   );
