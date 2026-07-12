@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { supabase, Entry, isVideoUrl } from '@/lib/supabase';
 import { COMPANIES, PROJECTS, WORKS } from '@/lib/constants';
+import { archiveEntries, ArchiveProgress } from '@/lib/archive';
 
 const selectCls = 'rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 bg-white';
 const editInputCls =
@@ -34,6 +35,8 @@ export default function EntriesPanel({
   const [editState, setEditState] = useState<EditState | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [archiving, setArchiving] = useState(false);
+  const [archiveMsg, setArchiveMsg] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -105,6 +108,29 @@ export default function EntriesPanel({
     }
   }
 
+  async function handleArchive() {
+    if (
+      !confirm(
+        `Görünen ${entries.length} kayıttaki fotoğraflar zip olarak indirilecek, sonra Supabase'den silinecek (metin bilgisi kalır). Devam edilsin mi?`
+      )
+    )
+      return;
+    setArchiving(true);
+    setArchiveMsg(null);
+    await archiveEntries(entries, (p: ArchiveProgress) => {
+      const labels: Record<ArchiveProgress['step'], string> = {
+        zipliyor: 'Fotoğraflar zip haline getiriliyor...',
+        indiriliyor: 'Bilgisayara indiriliyor...',
+        temizleniyor: 'Supabase üzerinde temizleniyor...',
+        tamam: p.detail || 'Tamamlandı.',
+        hata: p.detail || 'Hata oluştu.',
+      };
+      setArchiveMsg(labels[p.step]);
+    });
+    setArchiving(false);
+    load();
+  }
+
   return (
     <div>
       <div className="mb-3 flex flex-wrap gap-2 print:hidden">
@@ -148,7 +174,22 @@ export default function EntriesPanel({
         >
           Rapor
         </button>
+        {isAdmin && (
+          <button
+            onClick={handleArchive}
+            disabled={archiving}
+            className="whitespace-nowrap rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 disabled:opacity-50"
+          >
+            {archiving ? 'Arşivleniyor...' : 'Arşivle'}
+          </button>
+        )}
       </div>
+
+      {archiveMsg && (
+        <p className="mb-3 rounded-lg bg-neutral-100 px-3 py-2 text-xs font-medium text-neutral-700 print:hidden">
+          {archiveMsg}
+        </p>
+      )}
 
       {loading && <p className="text-sm text-neutral-500">Yükleniyor...</p>}
 
