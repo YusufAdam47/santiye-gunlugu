@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { COMPANIES, PROJECTS, WORKS, LAST_COMPANY_KEY } from '@/lib/constants';
+import { COMPANIES, PROJECTS, WORKS, LAST_COMPANY_KEY, ENTRY_CODE_KEY } from '@/lib/constants';
 import { queueEntry, getPendingCount, syncPendingEntries } from '@/lib/offlineQueue';
 
 type MediaItem = { file: File; url: string; isVideo: boolean };
@@ -17,6 +17,7 @@ export default function NewEntryForm() {
   const [project, setProject] = useState(PROJECTS[0]);
   const [work, setWork] = useState(WORKS[0]);
   const [note, setNote] = useState('');
+  const [entryCode, setEntryCode] = useState('');
   const [gps, setGps] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsStatus, setGpsStatus] = useState('Konum alınıyor...');
   const [saving, setSaving] = useState(false);
@@ -65,6 +66,8 @@ export default function NewEntryForm() {
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem(LAST_COMPANY_KEY) : null;
     if (saved && COMPANIES.includes(saved)) setCompany(saved);
+    const savedCode = typeof window !== 'undefined' ? localStorage.getItem(ENTRY_CODE_KEY) : null;
+    if (savedCode) setEntryCode(savedCode);
   }, []);
 
   useEffect(() => {
@@ -86,6 +89,11 @@ export default function NewEntryForm() {
     localStorage.setItem(LAST_COMPANY_KEY, value);
   }
 
+  function handleCodeChange(value: string) {
+    setEntryCode(value);
+    localStorage.setItem(ENTRY_CODE_KEY, value);
+  }
+
   function handleFilesAdded(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
     const items: MediaItem[] = files.map((file) => ({
@@ -102,6 +110,10 @@ export default function NewEntryForm() {
   }
 
   async function handleSave() {
+    if (!entryCode.trim()) {
+      setError('Lütfen kişisel kodunu gir (kayıtlarını sonra bulabilmen için gerekli).');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -119,6 +131,7 @@ export default function NewEntryForm() {
           note: note || null,
           gps_lat: gps?.lat ?? null,
           gps_lng: gps?.lng ?? null,
+          entry_code: entryCode.trim(),
           mediaFiles,
         });
         setMedia([]);
@@ -150,6 +163,7 @@ export default function NewEntryForm() {
         media_urls: uploadedUrls,
         gps_lat: gps?.lat ?? null,
         gps_lng: gps?.lng ?? null,
+        entry_code: entryCode.trim(),
       });
       if (insertError) throw insertError;
 
@@ -168,6 +182,16 @@ export default function NewEntryForm() {
 
   return (
     <div className="rounded-xl border border-neutral-200 bg-white p-4">
+      <label className={labelCls}>Kişisel kodun</label>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={entryCode}
+        onChange={(e) => handleCodeChange(e.target.value)}
+        placeholder="Örn: 2580"
+        className={`mb-3 ${inputCls}`}
+      />
+
       <label className={labelCls}>Fotoğraf / video</label>
       <input
         ref={fileInputRef}

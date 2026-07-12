@@ -17,3 +17,4 @@ export const WORKS = [
 ];
 
 export const LAST_COMPANY_KEY = 'santiye-son-firma';
+export const ENTRY_CODE_KEY = 'santiye-kisisel-kod';

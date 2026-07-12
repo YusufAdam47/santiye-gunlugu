@@ -13,7 +13,7 @@ export default function PanelPage() {
       <h1 className="mb-4 text-lg font-medium text-neutral-900">Şantiye Günlüğü</h1>
       <Nav />
       <PanelGate>
-        <EntriesPanel refreshKey={refreshKey} />
+        {(auth) => <EntriesPanel refreshKey={refreshKey} isAdmin={auth.isAdmin} code={auth.code} />}
       </PanelGate>
     </main>
   );

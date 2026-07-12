@@ -16,7 +16,15 @@ type EditState = {
   media_urls: string[];
 };
 
-export default function EntriesPanel({ refreshKey }: { refreshKey: number }) {
+export default function EntriesPanel({
+  refreshKey,
+  isAdmin,
+  code,
+}: {
+  refreshKey: number;
+  isAdmin: boolean;
+  code: string;
+}) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [companyFilter, setCompanyFilter] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
@@ -29,6 +37,7 @@ export default function EntriesPanel({ refreshKey }: { refreshKey: number }) {
   async function load() {
     setLoading(true);
     let query = supabase.from('entries').select('*').order('created_at', { ascending: false });
+    if (!isAdmin) query = query.eq('entry_code', code);
     if (companyFilter) query = query.eq('company', companyFilter);
     if (projectFilter) query = query.eq('project', projectFilter);
     const { data, error } = await query;
@@ -39,7 +48,7 @@ export default function EntriesPanel({ refreshKey }: { refreshKey: number }) {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyFilter, projectFilter, refreshKey]);
+  }, [companyFilter, projectFilter, refreshKey, isAdmin, code]);
 
   function startEdit(e: Entry) {
     setEditingId(e.id);

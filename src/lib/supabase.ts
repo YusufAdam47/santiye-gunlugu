@@ -14,6 +14,7 @@ export type Entry = {
   media_urls: string[] | null;
   gps_lat: number | null;
   gps_lng: number | null;
+  entry_code: string | null;
   created_at: string;
 };
 
