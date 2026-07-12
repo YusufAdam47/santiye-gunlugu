@@ -28,6 +28,7 @@ export default function EntriesPanel({
   const [entries, setEntries] = useState<Entry[]>([]);
   const [companyFilter, setCompanyFilter] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
+  const [codeFilter, setCodeFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
@@ -38,6 +39,7 @@ export default function EntriesPanel({
     setLoading(true);
     let query = supabase.from('entries').select('*').order('created_at', { ascending: false });
     if (!isAdmin) query = query.eq('entry_code', code);
+    if (isAdmin && codeFilter.trim()) query = query.eq('entry_code', codeFilter.trim());
     if (companyFilter) query = query.eq('company', companyFilter);
     if (projectFilter) query = query.eq('project', projectFilter);
     const { data, error } = await query;
@@ -48,7 +50,7 @@ export default function EntriesPanel({
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyFilter, projectFilter, refreshKey, isAdmin, code]);
+  }, [companyFilter, projectFilter, codeFilter, refreshKey, isAdmin, code]);
 
   function startEdit(e: Entry) {
     setEditingId(e.id);
@@ -106,6 +108,16 @@ export default function EntriesPanel({
   return (
     <div>
       <div className="mb-3 flex flex-wrap gap-2 print:hidden">
+        {isAdmin && (
+          <input
+            type="text"
+            inputMode="numeric"
+            value={codeFilter}
+            onChange={(e) => setCodeFilter(e.target.value)}
+            placeholder="Kişisel kod ile ara"
+            className={`flex-1 ${selectCls}`}
+          />
+        )}
         <select
           value={companyFilter}
           onChange={(e) => setCompanyFilter(e.target.value)}
@@ -279,6 +291,11 @@ export default function EntriesPanel({
                 <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-700">
                   {e.work}
                 </span>
+                {e.entry_code && (
+                  <span className="rounded bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                    Kod: {e.entry_code}
+                  </span>
+                )}
               </div>
               {e.note && <p className="mb-1.5 text-sm text-neutral-900">{e.note}</p>}
               <p className="mb-2 text-xs text-neutral-500">
