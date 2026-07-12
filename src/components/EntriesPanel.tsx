@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase, Entry, isVideoUrl } from '@/lib/supabase';
 import { COMPANIES, PROJECTS, WORKS } from '@/lib/constants';
 import { archiveEntries, ArchiveProgress } from '@/lib/archive';
+import { exportEntriesToExcel } from '@/lib/excelExport';
 
 const selectCls = 'rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 bg-white';
 const editInputCls =
@@ -30,6 +31,8 @@ export default function EntriesPanel({
   const [companyFilter, setCompanyFilter] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [codeFilter, setCodeFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
@@ -45,6 +48,8 @@ export default function EntriesPanel({
     if (isAdmin && codeFilter.trim()) query = query.eq('entry_code', codeFilter.trim());
     if (companyFilter) query = query.eq('company', companyFilter);
     if (projectFilter) query = query.eq('project', projectFilter);
+    if (dateFrom) query = query.gte('created_at', `${dateFrom}T00:00:00`);
+    if (dateTo) query = query.lte('created_at', `${dateTo}T23:59:59`);
     const { data, error } = await query;
     if (!error && data) setEntries(data as Entry[]);
     setLoading(false);
@@ -53,7 +58,7 @@ export default function EntriesPanel({
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyFilter, projectFilter, codeFilter, refreshKey, isAdmin, code]);
+  }, [companyFilter, projectFilter, codeFilter, dateFrom, dateTo, refreshKey, isAdmin, code]);
 
   function startEdit(e: Entry) {
     setEditingId(e.id);
@@ -168,11 +173,31 @@ export default function EntriesPanel({
             </option>
           ))}
         </select>
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          className={selectCls}
+          aria-label="Başlangıç tarihi"
+        />
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => setDateTo(e.target.value)}
+          className={selectCls}
+          aria-label="Bitiş tarihi"
+        />
         <button
           onClick={() => window.print()}
           className="whitespace-nowrap rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-900"
         >
           Rapor
+        </button>
+        <button
+          onClick={() => exportEntriesToExcel(entries)}
+          className="whitespace-nowrap rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-900"
+        >
+          Excel
         </button>
         {isAdmin && (
           <button
