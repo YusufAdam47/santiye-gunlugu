@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { COMPANIES, PROJECTS, WORKS, LAST_COMPANY_KEY, ENTRY_CODE_KEY } from '@/lib/constants';
+import { WORKS, LAST_COMPANY_KEY, ENTRY_CODE_KEY } from '@/lib/constants';
 import { queueEntry, getPendingCount, syncPendingEntries } from '@/lib/offlineQueue';
+import { fetchCompanies, fetchProjects, Option } from '@/lib/options';
 
 type MediaItem = { file: File; url: string; isVideo: boolean };
 
@@ -13,8 +14,11 @@ const labelCls = 'mb-1.5 block text-sm font-medium text-neutral-700';
 
 export default function NewEntryForm() {
   const [media, setMedia] = useState<MediaItem[]>([]);
-  const [company, setCompany] = useState(COMPANIES[0]);
-  const [project, setProject] = useState(PROJECTS[0]);
+  const [companies, setCompanies] = useState<Option[]>([]);
+  const [projects, setProjects] = useState<Option[]>([]);
+  const [optionsLoading, setOptionsLoading] = useState(true);
+  const [company, setCompany] = useState('');
+  const [project, setProject] = useState('');
   const [work, setWork] = useState(WORKS[0]);
   const [note, setNote] = useState('');
   const [entryCode, setEntryCode] = useState('');
@@ -65,9 +69,23 @@ export default function NewEntryForm() {
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem(LAST_COMPANY_KEY) : null;
-    if (saved && COMPANIES.includes(saved)) setCompany(saved);
     const savedCode = typeof window !== 'undefined' ? localStorage.getItem(ENTRY_CODE_KEY) : null;
     if (savedCode) setEntryCode(savedCode);
+
+    async function loadOptions() {
+      setOptionsLoading(true);
+      const [c, p] = await Promise.all([fetchCompanies(), fetchProjects()]);
+      setCompanies(c);
+      setProjects(p);
+      if (saved && c.some((item) => item.name === saved)) {
+        setCompany(saved);
+      } else if (c.length > 0) {
+        setCompany(c[0].name);
+      }
+      if (p.length > 0) setProject(p[0].name);
+      setOptionsLoading(false);
+    }
+    loadOptions();
   }, []);
 
   useEffect(() => {
@@ -112,6 +130,10 @@ export default function NewEntryForm() {
   async function handleSave() {
     if (!entryCode.trim()) {
       setError('Lütfen kişisel kodunu gir (kayıtlarını sonra bulabilmen için gerekli).');
+      return;
+    }
+    if (!company || !project) {
+      setError('Firma ve proje/blok seçili olmalı. Liste boşsa admin ile iletişime geç.');
       return;
     }
     setSaving(true);
@@ -232,11 +254,13 @@ export default function NewEntryForm() {
       <select
         value={company}
         onChange={(e) => handleCompanyChange(e.target.value)}
+        disabled={optionsLoading}
         className={`mb-3 ${inputCls}`}
       >
-        {COMPANIES.map((c) => (
-          <option key={c} value={c}>
-            {c}
+        {companies.length === 0 && <option value="">Firma yok, admin eklemeli</option>}
+        {companies.map((c) => (
+          <option key={c.id} value={c.name}>
+            {c.name}
           </option>
         ))}
       </select>
@@ -245,11 +269,13 @@ export default function NewEntryForm() {
       <select
         value={project}
         onChange={(e) => setProject(e.target.value)}
+        disabled={optionsLoading}
         className={`mb-3 ${inputCls}`}
       >
-        {PROJECTS.map((p) => (
-          <option key={p} value={p}>
-            {p}
+        {projects.length === 0 && <option value="">Blok yok, admin eklemeli</option>}
+        {projects.map((p) => (
+          <option key={p.id} value={p.name}>
+            {p.name}
           </option>
         ))}
       </select>

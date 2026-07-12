@@ -1,10 +1,5 @@
-export const COMPANIES = [
-  'Hitit İnşaat',
-  'Ant İnşaat',
-  'Yüksel Müşavirlik',
-];
-
-export const PROJECTS = ['B-Blok', 'A-Blok', 'TBM Girişi', 'NATM Kesimi', 'Portal'];
+// Firma ve proje/blok listeleri artık veritabanında (companies / projects
+// tabloları) tutuluyor, admin panelinden yönetiliyor. Bkz. src/lib/options.ts
 
 export const WORKS = [
   'Kazı',

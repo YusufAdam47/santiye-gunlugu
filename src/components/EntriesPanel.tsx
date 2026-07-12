@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { supabase, Entry, isVideoUrl } from '@/lib/supabase';
-import { COMPANIES, PROJECTS, WORKS } from '@/lib/constants';
+import { WORKS } from '@/lib/constants';
 import { archiveEntries, ArchiveProgress } from '@/lib/archive';
 import { exportEntriesToExcel } from '@/lib/excelExport';
+import { fetchCompanies, fetchProjects, Option } from '@/lib/options';
 
 const selectCls = 'rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 bg-white';
 const editInputCls =
@@ -28,6 +29,8 @@ export default function EntriesPanel({
   code: string;
 }) {
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [companies, setCompanies] = useState<Option[]>([]);
+  const [projects, setProjects] = useState<Option[]>([]);
   const [companyFilter, setCompanyFilter] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [codeFilter, setCodeFilter] = useState('');
@@ -56,6 +59,11 @@ export default function EntriesPanel({
   }
 
   useEffect(() => {
+    fetchCompanies().then(setCompanies);
+    fetchProjects().then(setProjects);
+  }, [refreshKey]);
+
+  useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyFilter, projectFilter, codeFilter, dateFrom, dateTo, refreshKey, isAdmin, code]);
@@ -63,7 +71,7 @@ export default function EntriesPanel({
   function startEdit(e: Entry) {
     setEditingId(e.id);
     setEditState({
-      company: e.company || COMPANIES[0],
+      company: e.company || (companies[0]?.name ?? ''),
       project: e.project,
       work: e.work,
       note: e.note || '',
@@ -155,9 +163,9 @@ export default function EntriesPanel({
           className={`flex-1 ${selectCls}`}
         >
           <option value="">Tüm firmalar</option>
-          {COMPANIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
+          {companies.map((c) => (
+            <option key={c.id} value={c.name}>
+              {c.name}
             </option>
           ))}
         </select>
@@ -167,9 +175,9 @@ export default function EntriesPanel({
           className={`flex-1 ${selectCls}`}
         >
           <option value="">Tüm bloklar</option>
-          {PROJECTS.map((p) => (
-            <option key={p} value={p}>
-              {p}
+          {projects.map((p) => (
+            <option key={p.id} value={p.name}>
+              {p.name}
             </option>
           ))}
         </select>
@@ -270,9 +278,9 @@ export default function EntriesPanel({
                   onChange={(ev) => setEditState({ ...editState, company: ev.target.value })}
                   className={editInputCls}
                 >
-                  {COMPANIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {c.name}
                     </option>
                   ))}
                 </select>
@@ -282,9 +290,9 @@ export default function EntriesPanel({
                   onChange={(ev) => setEditState({ ...editState, project: ev.target.value })}
                   className={editInputCls}
                 >
-                  {PROJECTS.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
                     </option>
                   ))}
                 </select>

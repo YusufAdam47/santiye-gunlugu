@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Nav from '@/components/Nav';
 import EntriesPanel from '@/components/EntriesPanel';
 import PanelGate from '@/components/PanelGate';
+import AdminOptionsManager from '@/components/AdminOptionsManager';
 
 export default function PanelPage() {
   const [refreshKey] = useState(0);
@@ -13,7 +14,12 @@ export default function PanelPage() {
       <h1 className="mb-4 text-lg font-medium text-neutral-900">Şantiye Günlüğü</h1>
       <Nav />
       <PanelGate>
-        {(auth) => <EntriesPanel refreshKey={refreshKey} isAdmin={auth.isAdmin} code={auth.code} />}
+        {(auth) => (
+          <>
+            {auth.isAdmin && <AdminOptionsManager />}
+            <EntriesPanel refreshKey={refreshKey} isAdmin={auth.isAdmin} code={auth.code} />
+          </>
+        )}
       </PanelGate>
     </main>
   );
