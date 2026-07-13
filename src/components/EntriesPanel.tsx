@@ -6,6 +6,8 @@ import { WORKS } from '@/lib/constants';
 import { archiveEntries, ArchiveProgress } from '@/lib/archive';
 import { exportEntriesToExcel } from '@/lib/excelExport';
 import { fetchCompanies, fetchProjects, Option } from '@/lib/options';
+import { fetchCategoriesWithItems, Category } from '@/lib/customCategories';
+import { PanelAuth } from '@/components/PanelGate';
 
 const selectCls = 'rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-900 bg-white';
 const editInputCls =
@@ -17,20 +19,18 @@ type EditState = {
   work: string;
   note: string;
   media_urls: string[];
+  extra: Record<string, string>;
 };
 
-export default function EntriesPanel({
-  refreshKey,
-  isAdmin,
-  code,
-}: {
-  refreshKey: number;
-  isAdmin: boolean;
-  code: string;
-}) {
+export default function EntriesPanel({ refreshKey, auth }: { refreshKey: number; auth: PanelAuth }) {
+  const isAdmin = auth.role === 'admin';
+  const isManager = auth.role === 'manager';
+  const fixedProject = isManager ? auth.project : undefined;
+
   const [entries, setEntries] = useState<Entry[]>([]);
   const [companies, setCompanies] = useState<Option[]>([]);
   const [projects, setProjects] = useState<Option[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [companyFilter, setCompanyFilter] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [codeFilter, setCodeFilter] = useState('');
@@ -47,10 +47,11 @@ export default function EntriesPanel({
   async function load() {
     setLoading(true);
     let query = supabase.from('entries').select('*').order('created_at', { ascending: false });
-    if (!isAdmin) query = query.eq('entry_code', code);
+    if (auth.role === 'personal') query = query.eq('entry_code', auth.code);
+    if (isManager && fixedProject) query = query.eq('project', fixedProject);
     if (isAdmin && codeFilter.trim()) query = query.eq('entry_code', codeFilter.trim());
     if (companyFilter) query = query.eq('company', companyFilter);
-    if (projectFilter) query = query.eq('project', projectFilter);
+    if (!isManager && projectFilter) query = query.eq('project', projectFilter);
     if (dateFrom) query = query.gte('created_at', `${dateFrom}T00:00:00`);
     if (dateTo) query = query.lte('created_at', `${dateTo}T23:59:59`);
     const { data, error } = await query;
@@ -61,12 +62,13 @@ export default function EntriesPanel({
   useEffect(() => {
     fetchCompanies().then(setCompanies);
     fetchProjects().then(setProjects);
+    fetchCategoriesWithItems().then(setCategories);
   }, [refreshKey]);
 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyFilter, projectFilter, codeFilter, dateFrom, dateTo, refreshKey, isAdmin, code]);
+  }, [companyFilter, projectFilter, codeFilter, dateFrom, dateTo, refreshKey, auth.role, auth.code]);
 
   function startEdit(e: Entry) {
     setEditingId(e.id);
@@ -76,6 +78,7 @@ export default function EntriesPanel({
       work: e.work,
       note: e.note || '',
       media_urls: e.media_urls || [],
+      extra: e.extra || {},
     });
   }
 
@@ -100,6 +103,7 @@ export default function EntriesPanel({
         work: editState.work,
         note: editState.note || null,
         media_urls: editState.media_urls,
+        extra: editState.extra,
       })
       .eq('id', id);
     setSavingEdit(false);
@@ -144,6 +148,8 @@ export default function EntriesPanel({
     load();
   }
 
+  const canManage = isAdmin || isManager;
+
   return (
     <div>
       <div className="mb-3 flex flex-wrap gap-2 print:hidden">
@@ -169,18 +175,20 @@ export default function EntriesPanel({
             </option>
           ))}
         </select>
-        <select
-          value={projectFilter}
-          onChange={(e) => setProjectFilter(e.target.value)}
-          className={`flex-1 ${selectCls}`}
-        >
-          <option value="">Tüm bloklar</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.name}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+        {!isManager && (
+          <select
+            value={projectFilter}
+            onChange={(e) => setProjectFilter(e.target.value)}
+            className={`flex-1 ${selectCls}`}
+          >
+            <option value="">Tüm bloklar</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.name}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
         <input
           type="date"
           value={dateFrom}
@@ -207,7 +215,7 @@ export default function EntriesPanel({
         >
           Excel
         </button>
-        {isAdmin && (
+        {canManage && (
           <button
             onClick={handleArchive}
             disabled={archiving}
@@ -241,6 +249,7 @@ export default function EntriesPanel({
             d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
           const media = e.media_urls || [];
           const isEditing = editingId === e.id;
+          const canEditThis = isAdmin || isManager || (auth.role === 'personal' && e.entry_code === auth.code);
 
           if (isEditing && editState) {
             return (
@@ -308,6 +317,28 @@ export default function EntriesPanel({
                     </option>
                   ))}
                 </select>
+                {categories.map((cat) => (
+                  <div key={cat.id}>
+                    <label className="mb-1 block text-xs font-medium text-neutral-600">{cat.label}</label>
+                    <select
+                      value={editState.extra[cat.label] || ''}
+                      onChange={(ev) =>
+                        setEditState({
+                          ...editState,
+                          extra: { ...editState.extra, [cat.label]: ev.target.value },
+                        })
+                      }
+                      className={editInputCls}
+                    >
+                      <option value="">Seçilmedi</option>
+                      {cat.items.map((item) => (
+                        <option key={item.id} value={item.name}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
                 <label className="mb-1 block text-xs font-medium text-neutral-600">Not</label>
                 <textarea
                   value={editState.note}
@@ -365,6 +396,17 @@ export default function EntriesPanel({
                 <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-700">
                   {e.work}
                 </span>
+                {e.extra &&
+                  Object.entries(e.extra)
+                    .filter(([, v]) => v)
+                    .map(([k, v]) => (
+                      <span
+                        key={k}
+                        className="rounded bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-800"
+                      >
+                        {k}: {v}
+                      </span>
+                    ))}
                 {e.entry_code && (
                   <span className="rounded bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800">
                     Kod: {e.entry_code}
@@ -378,20 +420,22 @@ export default function EntriesPanel({
                   ? ` · ${e.gps_lat.toFixed(4)}, ${e.gps_lng.toFixed(4)}`
                   : ''}
               </p>
-              <div className="flex gap-2 print:hidden">
-                <button
-                  onClick={() => startEdit(e)}
-                  className="flex-1 rounded-lg border border-neutral-300 py-1.5 text-xs font-medium text-neutral-700"
-                >
-                  Düzenle
-                </button>
-                <button
-                  onClick={() => deleteEntry(e.id)}
-                  className="flex-1 rounded-lg border border-red-200 py-1.5 text-xs font-medium text-red-600"
-                >
-                  Sil
-                </button>
-              </div>
+              {canEditThis && (
+                <div className="flex gap-2 print:hidden">
+                  <button
+                    onClick={() => startEdit(e)}
+                    className="flex-1 rounded-lg border border-neutral-300 py-1.5 text-xs font-medium text-neutral-700"
+                  >
+                    Düzenle
+                  </button>
+                  <button
+                    onClick={() => deleteEntry(e.id)}
+                    className="flex-1 rounded-lg border border-red-200 py-1.5 text-xs font-medium text-red-600"
+                  >
+                    Sil
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}

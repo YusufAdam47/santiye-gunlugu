@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { WORKS, LAST_COMPANY_KEY, ENTRY_CODE_KEY } from '@/lib/constants';
 import { queueEntry, getPendingCount, syncPendingEntries } from '@/lib/offlineQueue';
 import { fetchCompanies, fetchProjects, Option } from '@/lib/options';
+import { fetchCategoriesWithItems, Category } from '@/lib/customCategories';
 
 type MediaItem = { file: File; url: string; isVideo: boolean };
 
@@ -16,6 +17,8 @@ export default function NewEntryForm() {
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [companies, setCompanies] = useState<Option[]>([]);
   const [projects, setProjects] = useState<Option[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [extra, setExtra] = useState<Record<string, string>>({});
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [company, setCompany] = useState('');
   const [project, setProject] = useState('');
@@ -74,9 +77,10 @@ export default function NewEntryForm() {
 
     async function loadOptions() {
       setOptionsLoading(true);
-      const [c, p] = await Promise.all([fetchCompanies(), fetchProjects()]);
+      const [c, p, cats] = await Promise.all([fetchCompanies(), fetchProjects(), fetchCategoriesWithItems()]);
       setCompanies(c);
       setProjects(p);
+      setCategories(cats);
       if (saved && c.some((item) => item.name === saved)) {
         setCompany(saved);
       } else if (c.length > 0) {
@@ -154,6 +158,7 @@ export default function NewEntryForm() {
           gps_lat: gps?.lat ?? null,
           gps_lng: gps?.lng ?? null,
           entry_code: entryCode.trim(),
+          extra,
           mediaFiles,
         });
         setMedia([]);
@@ -186,6 +191,7 @@ export default function NewEntryForm() {
         gps_lat: gps?.lat ?? null,
         gps_lng: gps?.lng ?? null,
         entry_code: entryCode.trim(),
+        extra,
       });
       if (insertError) throw insertError;
 
@@ -292,6 +298,24 @@ export default function NewEntryForm() {
           </option>
         ))}
       </select>
+
+      {categories.map((cat) => (
+        <div key={cat.id}>
+          <label className={labelCls}>{cat.label}</label>
+          <select
+            value={extra[cat.label] || ''}
+            onChange={(e) => setExtra({ ...extra, [cat.label]: e.target.value })}
+            className={`mb-3 ${inputCls}`}
+          >
+            <option value="">Seçilmedi</option>
+            {cat.items.map((item) => (
+              <option key={item.id} value={item.name}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ))}
 
       <label className={labelCls}>Not (opsiyonel)</label>
       <textarea

@@ -16,8 +16,8 @@ export default function PanelPage() {
       <PanelGate>
         {(auth) => (
           <>
-            {auth.isAdmin && <AdminOptionsManager />}
-            <EntriesPanel refreshKey={refreshKey} isAdmin={auth.isAdmin} code={auth.code} />
+            {auth.role === 'admin' && <AdminOptionsManager />}
+            <EntriesPanel refreshKey={refreshKey} auth={auth} />
           </>
         )}
       </PanelGate>

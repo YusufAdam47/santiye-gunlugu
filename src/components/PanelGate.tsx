@@ -1,10 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { findManagerByCode } from '@/lib/managers';
 
 const SESSION_KEY = 'santiye-yetkili-oturum';
 
-export type PanelAuth = { isAdmin: boolean; code: string };
+export type PanelAuth = {
+  role: 'admin' | 'manager' | 'personal';
+  code: string;
+  project?: string;
+};
 
 export default function PanelGate({
   children,
@@ -15,6 +20,7 @@ export default function PanelGate({
   const [checked, setChecked] = useState(false);
   const [pw, setPw] = useState('');
   const [error, setError] = useState(false);
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     const saved = sessionStorage.getItem(SESSION_KEY);
@@ -28,20 +34,32 @@ export default function PanelGate({
     setChecked(true);
   }, []);
 
-  function submit() {
-    const masterCode = process.env.NEXT_PUBLIC_PANEL_PASSWORD || '';
+  async function submit() {
     const trimmed = pw.trim();
     if (trimmed === '') {
       setError(true);
       return;
     }
-    const newAuth: PanelAuth =
-      masterCode !== '' && trimmed === masterCode
-        ? { isAdmin: true, code: trimmed }
-        : { isAdmin: false, code: trimmed };
+    setChecking(true);
+    setError(false);
+
+    const masterCode = process.env.NEXT_PUBLIC_PANEL_PASSWORD || '';
+    let newAuth: PanelAuth;
+
+    if (masterCode !== '' && trimmed === masterCode) {
+      newAuth = { role: 'admin', code: trimmed };
+    } else {
+      const manager = await findManagerByCode(trimmed);
+      if (manager) {
+        newAuth = { role: 'manager', code: trimmed, project: manager.project };
+      } else {
+        newAuth = { role: 'personal', code: trimmed };
+      }
+    }
+
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(newAuth));
     setAuth(newAuth);
-    setError(false);
+    setChecking(false);
   }
 
   function logout() {
@@ -69,20 +87,26 @@ export default function PanelGate({
         {error && <p className="mb-3 text-sm text-red-600">Bir şey gir.</p>}
         <button
           onClick={submit}
-          className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white"
+          disabled={checking}
+          className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white disabled:opacity-50"
         >
-          Giriş yap
+          {checking ? 'Kontrol ediliyor...' : 'Giriş yap'}
         </button>
       </div>
     );
   }
 
+  const roleLabel =
+    auth.role === 'admin'
+      ? 'Yetkili girişi (tüm kayıtlar)'
+      : auth.role === 'manager'
+      ? `Proje yetkilisi: ${auth.project} (sadece bu projenin kayıtları)`
+      : `Kişisel kod: ${auth.code} (sadece kendi kayıtların)`;
+
   return (
     <div>
       <div className="mb-3 flex items-center justify-between print:hidden">
-        <span className="text-xs text-neutral-500">
-          {auth.isAdmin ? 'Yetkili girişi (tüm kayıtlar)' : `Kişisel kod: ${auth.code} (sadece kendi kayıtların)`}
-        </span>
+        <span className="text-xs text-neutral-500">{roleLabel}</span>
         <button onClick={logout} className="text-xs font-medium text-blue-700">
           Çıkış yap
         </button>

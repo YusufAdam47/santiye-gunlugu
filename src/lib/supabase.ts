@@ -15,6 +15,7 @@ export type Entry = {
   gps_lat: number | null;
   gps_lng: number | null;
   entry_code: string | null;
+  extra: Record<string, string> | null;
   created_at: string;
 };
 

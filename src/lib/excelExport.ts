@@ -4,6 +4,12 @@ import { Entry } from './supabase';
 export function exportEntriesToExcel(entries: Entry[]) {
   const rows = entries.map((e) => {
     const d = new Date(e.created_at);
+    const extraStr = e.extra
+      ? Object.entries(e.extra)
+          .filter(([, v]) => v)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(', ')
+      : '';
     return {
       Tarih: d.toLocaleDateString('tr-TR'),
       Saat: d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
@@ -11,6 +17,7 @@ export function exportEntriesToExcel(entries: Entry[]) {
       Firma: e.company || '',
       'Proje / Blok': e.project,
       'İmalat Kalemi': e.work,
+      Ekstra: extraStr,
       Not: e.note || '',
       Enlem: e.gps_lat ?? '',
       Boylam: e.gps_lng ?? '',
@@ -26,6 +33,7 @@ export function exportEntriesToExcel(entries: Entry[]) {
     { wch: 18 }, // Firma
     { wch: 14 }, // Proje/Blok
     { wch: 16 }, // İmalat Kalemi
+    { wch: 24 }, // Ekstra
     { wch: 40 }, // Not
     { wch: 12 }, // Enlem
     { wch: 12 }, // Boylam

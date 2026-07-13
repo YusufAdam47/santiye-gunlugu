@@ -10,6 +10,7 @@ type PendingEntry = {
   gps_lat: number | null;
   gps_lng: number | null;
   entry_code: string;
+  extra: Record<string, string>;
   mediaFiles: { blob: Blob; name: string; type: string }[];
   createdAt: string;
 };
@@ -85,6 +86,7 @@ export async function syncPendingEntries(): Promise<{ synced: number; failed: nu
         gps_lat: item.gps_lat,
         gps_lng: item.gps_lng,
         entry_code: item.entry_code,
+        extra: item.extra,
       });
       if (insertError) throw insertError;
 
